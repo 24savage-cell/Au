@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Aegis",
+    "slug": "aegis-mobile",
+    "version": "2.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "aegis",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0B0D"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.ip4move.aegis",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "用于生物识别身份认证",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      },
+      "associatedDomains": ["applinks:aegis.ip4move.io"]
+    },
+    "android": {
+      "package": "io.ip4move.aegis",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0B0D"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "aegis.ip4move.io" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-haptics",
+      [
+        "expo-notifications",
+        {
+          "color": "#4DD4C4"
+        }
+      ]
+    ],
+    "extra": {
+      "apiBaseUrl": "https://api.aegis.ip4move.io",
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}
