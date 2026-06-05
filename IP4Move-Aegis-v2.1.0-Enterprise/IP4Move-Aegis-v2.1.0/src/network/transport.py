@@ -145,8 +145,8 @@ class PooledConnection:
         try:
             self.writer.close()
             await self.writer.wait_closed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"关闭连接池连接异常 ({self.host}:{self.port}): {e}")
 
 
 class ConnectionPool:
@@ -551,8 +551,8 @@ class SecureTransport:
                 if self._writer:
                     self._writer.close()
                     await self._writer.wait_closed()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"关闭传输层连接异常: {e}")
 
         # 减少连接计数
         if self._connection_manager:
@@ -609,8 +609,8 @@ class SecureTransport:
         if sock:
             try:
                 client_ip = sock.getpeername()[0]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"获取对端IP失败: {e}")
 
         transport = cls(reader, writer, on_message, client_ip)
         transport._host = host
@@ -638,8 +638,8 @@ class SecureTransport:
                 sock = writer.get_extra_info('socket')
                 if sock:
                     client_ip = sock.getpeername()[0]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"获取客户端IP失败: {e}")
 
             client_ip = client_ip or "unknown"
 
@@ -649,8 +649,8 @@ class SecureTransport:
                 writer.close()
                 try:
                     await writer.wait_closed()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"关闭超限连接异常 ({client_ip}): {e}")
                 return
 
             # 增加连接计数

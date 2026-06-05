@@ -252,6 +252,7 @@ class UDPClientProtocol(asyncio.DatagramProtocol):
     def error_received(self, exc: Exception) -> None:
         """UDP 错误"""
         logger.warning(f"UDP 隧道 {self._tunnel.tunnel_id} 错误: {exc}")
+        self._tunnel.state = TunnelState.ERROR
 
     def connection_lost(self, exc: Optional[Exception]) -> None:
         """UDP 连接丢失"""
@@ -327,7 +328,7 @@ async def _icmp_recv_loop(tunnel: Tunnel) -> None:
             continue
         except Exception as e:
             if tunnel.is_active:
-                logger.debug(f"ICMP 接收异常: {e}")
+                logger.warning(f"ICMP 接收异常: {e}")
             break
 
 
@@ -625,15 +626,15 @@ class TunnelManager:
             if tunnel._writer:
                 tunnel._writer.close()
                 await tunnel._writer.wait_closed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"关闭隧道 {tunnel_id} TCP 连接异常: {e}")
 
         # 关闭 UDP transport
         try:
             if tunnel._transport:
                 tunnel._transport.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"关闭隧道 {tunnel_id} UDP transport 异常: {e}")
 
         # 关闭 ICMP socket
         try:
@@ -645,8 +646,8 @@ class TunnelManager:
                     pass
             if tunnel._icmp_socket:
                 tunnel._icmp_socket.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"关闭隧道 {tunnel_id} ICMP socket 异常: {e}")
 
         tunnel.state = TunnelState.CLOSED
         logger.info(f"隧道 {tunnel_id} 已关闭")
@@ -672,6 +673,8 @@ class TunnelManager:
                             await self._send_keepalive(tunnel)
             except asyncio.CancelledError:
                 break
+            except Exception as e:
+                logger.error(f"Keepalive 循环异常: {e}")
             await asyncio.sleep(5)
 
     async def _send_keepalive(self, tunnel: Tunnel) -> None:
@@ -682,13 +685,15 @@ class TunnelManager:
                     try:
                         tunnel._writer.write(b"\x00")
                         await tunnel._writer.drain()
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"隧道 {tunnel.tunnel_id} TCP keepalive 失败: {e}")
                         tunnel.state = TunnelState.ERROR
             elif tunnel.config.protocol == TunnelProtocol.UDP:
                 if tunnel._udp_protocol:
                     try:
                         tunnel._udp_protocol.send(b"\x00")
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"隧道 {tunnel.tunnel_id} UDP keepalive 失败: {e}")
                         tunnel.state = TunnelState.ERROR
             elif tunnel.config.protocol == TunnelProtocol.ICMP:
                 if tunnel._icmp_socket:
@@ -702,10 +707,11 @@ class TunnelManager:
                             packet,
                             (tunnel.remote_address or "0.0.0.0", 0),
                         )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"隧道 {tunnel.tunnel_id} ICMP keepalive 失败: {e}")
                         tunnel.state = TunnelState.ERROR
         except Exception as e:
-            logger.debug(f"发送 keepalive 失败: {e}")
+            logger.warning(f"发送 keepalive 失败: {e}")
 
     async def start(self) -> None:
         """启动隧道管理器"""

@@ -332,8 +332,14 @@ class MessageProtocol:
         """
         try:
             # 解析标志位
+            if len(message.payload) < 5:
+                logger.warning("签名验证失败: payload 太短，无法包含签名头")
+                return False
             flag = message.payload[0]
             sig_len = struct.unpack("!I", message.payload[1:5])[0]
+            if len(message.payload) < 5 + sig_len:
+                logger.warning(f"签名验证失败: payload 长度不足 (需要 {5 + sig_len}, 实际 {len(message.payload)})")
+                return False
             signature = message.payload[5:5+sig_len]
             original_payload = message.payload[5+sig_len:]
             original_msg = Message(
@@ -363,6 +369,12 @@ class MessageProtocol:
             else:
                 logger.warning(f"未知的签名标志位: 0x{flag:02x}")
                 return False
+        except (struct.error, IndexError) as e:
+            logger.warning(f"签名验证失败: 消息数据损坏: {e}")
+            return False
+        except ImportError as e:
+            logger.error(f"签名验证失败: 缺少依赖库: {e}")
+            return False
         except Exception as e:
-            logger.debug(f"签名验证失败: {e}")
+            logger.error(f"签名验证失败: {e}")
             return False
