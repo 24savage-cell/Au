@@ -1,0 +1,55 @@
+# Prometheus 监控配置
+# IP4Move-Aegis v2.1.0
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ip4move-aegis'
+    replica: '{{.ExternalURL}}'
+
+# 告警规则
+rule_files:
+  - "alert_rules.yml"
+
+# 告警管理器
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+      # 生产环境配置告警管理器
+      # - alertmanager:9093
+
+# 抓取配置
+scrape_configs:
+  # Prometheus自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # IP4Move-Aegis 服务
+  - job_name: 'aegis'
+    static_configs:
+      - targets: ['aegis:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    
+    # 标签
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+)(?::\d+)?'
+        replacement: '${1}'
+
+  # Redis (如启用)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Node Exporter (如部署)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
