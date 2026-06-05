@@ -38,7 +38,8 @@ api.interceptors.response.use(
           original.headers.Authorization = `Bearer ${r.data.access}`;
           return api.request(original);
         }
-      } catch {
+      } catch (refreshErr) {
+        console.warn('Token refresh failed, clearing auth state:', refreshErr);
         await SecureStore.deleteItemAsync(TOKEN_KEY);
         await SecureStore.deleteItemAsync(REFRESH_KEY);
       }

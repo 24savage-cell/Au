@@ -87,6 +87,7 @@ class ConnectionManager:
         """通过连接发送数据"""
         info = self._connections.get(conn_id)
         if not info or not info.is_active or not info.transport:
+            logger.warning(f"发送失败: 连接 {conn_id} 不存在或已关闭")
             return False
         success = await info.transport.send(data)
         if success:
@@ -137,6 +138,8 @@ class ConnectionManager:
                         del self._connections[conn_id]
             except asyncio.CancelledError:
                 break
+            except Exception as e:
+                logger.error(f"连接清理循环异常: {e}")
             await asyncio.sleep(30)
 
     async def start(self) -> None:

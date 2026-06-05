@@ -108,8 +108,8 @@ class TrafficDisguise:
                 end = text.index(" ", start) if " " in text[start:] else text.index("\r", start)
                 encoded = text[start:end]
                 return base64.b64decode(encoded)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"DoH 数据提取失败: {e}")
         return None
 
     def _disguise_as_quic(self, data: bytes) -> bytes:
@@ -261,8 +261,8 @@ class TrafficDisguise:
                 body = text.split("\r\n\r\n", 1)[1]
                 import base64
                 return base64.b64decode(body.strip())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"HTTP 数据提取失败: {e}")
         return None
 
     def generate_padding(self, min_size: int = 64, max_size: int = 1400) -> bytes:
