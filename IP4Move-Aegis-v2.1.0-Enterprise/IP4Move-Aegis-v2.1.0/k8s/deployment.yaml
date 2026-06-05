@@ -1,0 +1,279 @@
+# IP4Move-Aegis v2.1.0 Kubernetes 部署清单
+# 生产环境配置
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ip4move
+  labels:
+    name: ip4move
+    version: "2.1.0"
+
+---
+# ConfigMap - 应用配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-config
+  namespace: ip4move
+data:
+  IP4MOVE_ENV: "production"
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  LOG_LEVEL: "INFO"
+  JSON_LOGS: "true"
+  METRICS_ENABLED: "true"
+  HEALTH_PATH: "/health"
+  METRICS_PATH: "/metrics"
+
+---
+# Secret - 密钥 (生产环境使用外部密钥管理)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aegis-secrets
+  namespace: ip4move
+type: Opaque
+stringData:
+  # 生产环境必须修改！
+  # 生成命令: openssl rand -hex 32
+  # AEGIS_MASTER_SECRET must be replaced before deployment.
+  # Use: kubectl create secret generic aegis-secrets --from-literal=AEGIS_MASTER_SECRET=$(openssl rand -hex 32)
+  AEGIS_MASTER_SECRET: "REPLACE_ME_BEFORE_DEPLOY"
+
+---
+# Deployment - 主应用
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis
+  namespace: ip4move
+  labels:
+    app: aegis
+    version: "2.1.0"
+spec:
+  replicas: 3  # 生产环境建议3+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aegis
+  template:
+    metadata:
+      labels:
+        app: aegis
+        version: "2.1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+        - name: aegis
+          image: ip4move-aegis:2.1.0
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: dht
+              containerPort: 9050
+              protocol: UDP
+          
+          envFrom:
+            - configMapRef:
+                name: aegis-config
+          
+          env:
+            - name: AEGIS_MASTER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aegis-secrets
+                  key: AEGIS_MASTER_SECRET
+          
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /app/data
+      
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+
+---
+# Service - 集群内访问
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis
+  namespace: ip4move
+  labels:
+    app: aegis
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: dht
+      port: 9050
+      targetPort: dht
+      protocol: UDP
+  selector:
+    app: aegis
+
+---
+# Service - NodePort (外部访问)
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-nodeport
+  namespace: ip4move
+  labels:
+    app: aegis
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30080
+      protocol: TCP
+  selector:
+    app: aegis
+
+---
+# HorizontalPodAutoscaler - 自动扩缩容
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-hpa
+  namespace: ip4move
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegis
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+
+---
+# PodDisruptionBudget - 保证可用性
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-pdb
+  namespace: ip4move
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: aegis
+
+---
+# NetworkPolicy - 网络隔离
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aegis-network-policy
+  namespace: ip4move
+spec:
+  podSelector:
+    matchLabels:
+      app: aegis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: UDP
+          port: 9050
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 443
