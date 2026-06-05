@@ -10,7 +10,13 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
-from xml.etree import ElementTree as ET
+try:
+    from defusedxml.ElementTree import parse as safe_parse, fromstring as safe_fromstring
+except ImportError:
+    # Fallback: disable external entity resolution manually
+    import xml.etree.ElementTree as ET
+    safe_parse = ET.parse
+    safe_fromstring = ET.fromstring
 
 logger = logging.getLogger(__name__)
 

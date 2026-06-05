@@ -6,6 +6,7 @@
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -165,7 +166,7 @@ class LocalIdentityBackend(IdentityBackend):
         """本地认证"""
         # 模拟本地认证
         user_data = self._users.get(username)
-        if user_data and user_data.get("password") == self._hash_password(password):
+        if user_data and self._verify_password(password, user_data.get("password", "")):
             return UserIdentity(
                 user_id=user_data["user_id"],
                 username=username,
@@ -193,9 +194,14 @@ class LocalIdentityBackend(IdentityBackend):
         """验证本地令牌"""
         return self._tokens.get(token)
         
-    def _hash_password(self, password: str) -> str:
-        """密码哈希"""
-        return hashlib.sha256(password.encode()).hexdigest()
+    def _hash_password(self, password: str, salt: Optional[bytes] = None) -> str:
+        """密码哈希 (scrypt)"""
+        if salt is None:
+            salt = secrets.token_bytes(16)
+        dk = hashlib.scrypt(
+            password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32
+        )
+        return salt.hex() + ":" + dk.hex()
         
     def add_user(self, username: str, password: str, **kwargs) -> None:
         """添加用户"""
@@ -204,6 +210,20 @@ class LocalIdentityBackend(IdentityBackend):
             "password": self._hash_password(password),
             **kwargs
         }
+
+    def _verify_password(self, password: str, stored: str) -> bool:
+        """Verify password against stored scrypt hash."""
+        if ":" not in stored:
+            return False
+        salt_hex, dk_hex = stored.split(":", 1)
+        try:
+            salt = bytes.fromhex(salt_hex)
+        except ValueError:
+            return False
+        dk = hashlib.scrypt(
+            password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32
+        )
+        return hmac.compare_digest(dk.hex(), dk_hex)
 
 
 class LDAPIdentityBackend(IdentityBackend):
@@ -220,8 +240,10 @@ class LDAPIdentityBackend(IdentityBackend):
         """LDAP认证"""
         try:
             import ldap3
+            from ldap3.utils.dn import escape_rdn
+            from ldap3.utils.conv import escape_filter_chars
             server = ldap3.Server(self.server_url)
-            user_dn = f"uid={username},{self.base_dn}"
+            user_dn = f"uid={escape_rdn(username)},{self.base_dn}"
             
             conn = ldap3.Connection(
                 server,
@@ -232,9 +254,10 @@ class LDAPIdentityBackend(IdentityBackend):
             
             if conn.bind():
                 # 获取用户信息
+                safe_username = escape_filter_chars(username)
                 conn.search(
                     self.base_dn,
-                    f"(uid={username})",
+                    f"(uid={safe_username})",
                     attributes=["cn", "mail", "memberOf"]
                 )
                 

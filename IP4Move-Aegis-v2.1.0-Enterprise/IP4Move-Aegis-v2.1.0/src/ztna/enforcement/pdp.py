@@ -75,12 +75,15 @@ class PolicyDecisionPoint:
         """
         logger.info(f"评估请求: {request.subject_id} -> {request.resource_id}")
         
-        # 模拟策略评估
-        # 实际实现会查询策略引擎
+        # Default-deny: reject requests unless an explicit policy matches.
+        # Production deployments MUST register policies via the policy engine.
+        logger.warning(
+            f"No policy matched for {request.subject_id} -> {request.resource_id}; denying"
+        )
         return DecisionResponse(
-            result=DecisionResult.PERMIT,
+            result=DecisionResult.DENY,
             obligations=[],
-            advice=["继续监控"]
+            advice=["No matching policy — access denied by default"]
         )
         
     def get_stats(self) -> dict[str, Any]:

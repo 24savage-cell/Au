@@ -37,7 +37,9 @@ type: Opaque
 stringData:
   # 生产环境必须修改！
   # 生成命令: openssl rand -hex 32
-  AEGIS_MASTER_SECRET: "change-this-in-production-32chars!"
+  # AEGIS_MASTER_SECRET must be replaced before deployment.
+  # Use: kubectl create secret generic aegis-secrets --from-literal=AEGIS_MASTER_SECRET=$(openssl rand -hex 32)
+  AEGIS_MASTER_SECRET: "REPLACE_ME_BEFORE_DEPLOY"
 
 ---
 # Deployment - 主应用

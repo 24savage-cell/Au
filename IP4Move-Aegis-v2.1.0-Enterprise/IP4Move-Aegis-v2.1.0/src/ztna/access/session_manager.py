@@ -104,7 +104,7 @@ class SessionManager:
             self._user_sessions[user_id] = []
         self._user_sessions[user_id].append(session_id)
         
-        logger.info(f"创建会话: {session_id} 用户: {user_id}")
+        logger.info(f"创建会话: {session_id[:8]}... 用户: {user_id}")
         return session
         
     def get_session(self, session_id: str) -> Optional[Session]:
@@ -126,7 +126,7 @@ class SessionManager:
         if session.user_id in self._user_sessions:
             self._user_sessions[session.user_id].remove(session_id)
             
-        logger.info(f"终止会话: {session_id}")
+        logger.info(f"终止会话: {session_id[:8]}...")
         return True
         
     def get_user_sessions(self, user_id: str) -> list[Session]:

@@ -138,9 +138,14 @@ class WebAuthnProvider(MFAProvider):
         
     async def verify(self, user_id: str, assertion: str) -> bool:
         """验证WebAuthn断言"""
-        # 实际实现需要验证签名
-        logger.info(f"验证WebAuthn: {user_id}")
-        return True
+        credential = self._credentials.get(user_id)
+        if not credential:
+            logger.warning(f"WebAuthn验证失败: 用户 {user_id} 无已注册凭证")
+            return False
+        # TODO: implement actual FIDO2 signature verification against
+        # the stored public key once a WebAuthn library is integrated.
+        logger.warning("WebAuthn signature verification not yet implemented")
+        return False
 
 
 class MFAManager:
