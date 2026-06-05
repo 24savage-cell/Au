@@ -5,12 +5,12 @@ STIX/TAXII采集器模块
 """
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
-from xml.etree import ElementTree as ET
+
+from src.common.base_component import BaseComponent
 
 logger = logging.getLogger(__name__)
 
@@ -41,32 +41,20 @@ class TAXIICollection:
 class TAXIIClient:
     """
     TAXII客户端
-    
+
     实现TAXII 2.1协议进行威胁情报交换
     """
-    
+
     def __init__(self, config: dict[str, Any]):
-        """
-        初始化TAXII客户端
-        
-        Args:
-            config: 配置字典
-        """
         self.config = config
         self.base_url = config.get("base_url", "")
         self.api_root = config.get("api_root", "/taxii2/")
         self.username = config.get("username", "")
         self.password = config.get("password", "")
         self.verify_ssl = config.get("verify_ssl", True)
-        
+
     async def discover_api_roots(self) -> list[dict[str, Any]]:
-        """
-        发现API根
-        
-        Returns:
-            API根列表
-        """
-        # 模拟TAXII发现
+        """发现API根"""
         return [
             {
                 "title": "Default API Root",
@@ -74,15 +62,9 @@ class TAXIIClient:
                 "max_content_length": 104857600
             }
         ]
-        
+
     async def get_collections(self) -> list[TAXIICollection]:
-        """
-        获取集合列表
-        
-        Returns:
-            集合列表
-        """
-        # 模拟获取集合
+        """获取集合列表"""
         return [
             TAXIICollection(
                 id="collection-1",
@@ -93,18 +75,9 @@ class TAXIIClient:
                 media_types=["application/stix+json;version=2.1"]
             )
         ]
-        
+
     async def get_objects(self, collection_id: str) -> list[STIXObject]:
-        """
-        获取STIX对象
-        
-        Args:
-            collection_id: 集合ID
-            
-        Returns:
-            STIX对象列表
-        """
-        # 模拟获取对象
+        """获取STIX对象"""
         return [
             STIXObject(
                 id="indicator--1234",
@@ -121,65 +94,42 @@ class TAXIIClient:
         ]
 
 
-class STIXTAXIICollector:
+class STIXTAXIICollector(BaseComponent):
     """
     STIX/TAXII采集器
-    
+
     从TAXII服务器收集STIX格式的威胁情报
     """
-    
+
+    @property
+    def component_name(self) -> str:
+        return "STIX/TAXII采集器"
+
     def __init__(self, config: Optional[dict] = None):
-        """
-        初始化采集器
-        
-        Args:
-            config: 配置字典
-        """
-        self.config = config or {}
-        self.enabled = self.config.get("enabled", True)
+        super().__init__(config)
         self.poll_interval = self.config.get("poll_interval", 300)
-        
-        # 初始化客户端
         self._clients: list[TAXIIClient] = []
         self._init_clients()
-        
-        # 存储
         self._objects: list[STIXObject] = []
-        
-        self._initialized = False
         self._polling_task: Optional[asyncio.Task] = None
-        
+
     def _init_clients(self) -> None:
         """初始化TAXII客户端"""
         servers = self.config.get("servers", [])
         for server_config in servers:
             self._clients.append(TAXIIClient(server_config))
-            
-    async def initialize(self) -> None:
-        """初始化采集器"""
-        if self._initialized:
-            return
-            
-        logger.info("初始化STIX/TAXII采集器...")
-        
-        # 启动轮询任务
+
+    async def _do_initialize(self) -> None:
         self._polling_task = asyncio.create_task(self._polling_loop())
-        
-        self._initialized = True
-        logger.info("STIX/TAXII采集器初始化完成")
-        
-    async def shutdown(self) -> None:
-        """关闭采集器"""
+
+    async def _do_shutdown(self) -> None:
         if self._polling_task:
             self._polling_task.cancel()
             try:
                 await self._polling_task
             except asyncio.CancelledError:
                 pass
-                
-        self._initialized = False
-        logger.info("STIX/TAXII采集器已关闭")
-        
+
     async def _polling_loop(self) -> None:
         """轮询循环"""
         while True:
@@ -191,7 +141,7 @@ class STIXTAXIICollector:
             except Exception as e:
                 logger.error(f"轮询错误: {e}")
                 await asyncio.sleep(60)
-                
+
     async def _collect_all(self) -> None:
         """从所有服务器收集情报"""
         for client in self._clients:
@@ -204,23 +154,12 @@ class STIXTAXIICollector:
                         logger.info(f"从 {collection.title} 收集 {len(objects)} 个对象")
             except Exception as e:
                 logger.error(f"收集错误: {e}")
-                
+
     def get_indicators(self) -> list[STIXObject]:
-        """
-        获取指标对象
-        
-        Returns:
-            指标对象列表
-        """
+        """获取指标对象"""
         return [obj for obj in self._objects if obj.type == "indicator"]
-        
+
     def get_stats(self) -> dict[str, Any]:
-        """
-        获取统计信息
-        
-        Returns:
-            统计信息
-        """
         return {
             "total_objects": len(self._objects),
             "indicators": len(self.get_indicators()),
